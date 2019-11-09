@@ -17,13 +17,13 @@ via the aymmetric RSA.
 
 -------------------------------------------------------------------------------
 -- PART 1 : asymmetric encryption
-
+-- Calculates the greatest common divisor of m and n
 gcd :: Int -> Int -> Int
 gcd m n
 	| n == 0    = m
 	| otherwise = gcd n (m `mod` n)
 
-
+-- Calculates the number of prime numbers in the range 1 to n
 phi :: Int -> Int
 phi num
     = length [x | x <- [1..num], gcd num x == 1]
@@ -38,11 +38,11 @@ computeCoeffs a b
   where
       ( q , r ) = quotRem a b
       ( u', v') = computeCoeffs b r
-      d         = gcd a b
+
 -- Inverse of a modulo m
 inverse :: Int -> Int -> Int
 inverse a m
-		| gcd a m ==1 = u `mod` m
+		| gcd a m == 1 = u `mod` m
     where
 			(u,v) = computeCoeffs a m
 
@@ -60,8 +60,9 @@ modPow a k m
 smallestCoPrimeOf :: Int -> Int
 --Pre: a /= 0
 smallestCoPrimeOf a
-    | a <= 2    = a+1
-    | otherwise = minimum [b | b <- [2..a], gcd a b == 1]
+    | a <= 2    = a + 1
+    | otherwise = head [b | b <- [2..a], gcd a b == 1]
+		-- used head instead of minimum to prevent redundant calculations
 
 
 
@@ -69,21 +70,20 @@ smallestCoPrimeOf a
 -- given two "large" distinct primes, p and q
 genKeys :: Int -> Int -> ((Int, Int), (Int, Int))
 genKeys p q
-    = ((e,n), (e,n))
-	  where
-	  	n = (p*q)
-	  	e = smallestCoPrimeOf ((p-1)*(q-1))
-	 -- d = inverse 1 ((p-1)*(q-1))
-	--	e*d `mod` ((p-1)*(q-1)) = 1 `mod` ((p-1)*(q-1))
+  = ((e,n), (d,n))
+	where
+		n = p * q
+		e = smallestCoPrimeOf ((p-1)*(q-1))
+		d = inverse e ((p-1)*(q-1))
 
 -- RSA encryption/decryption
 rsaEncrypt :: Int -> (Int, Int) -> Int
-rsaEncrypt
-  = undefined
+rsaEncrypt x (e,n)
+  = modPow x e n
 
 rsaDecrypt :: Int -> (Int, Int) -> Int
-rsaDecrypt
-  = undefined
+rsaDecrypt c (d,n)
+  = modPow c d n
 
 -------------------------------------------------------------------------------
 -- PART 2 : symmetric encryption
@@ -92,23 +92,26 @@ rsaDecrypt
 toInt :: Char -> Int
 -- Pre: The letters are in lower case
 toInt letter
-  = ord(letter) - 97
+  = ord(letter) - ord 'a'
 
 -- Returns the n^th letter
 toChar :: Int -> Char
 --Pre: The letters are in lower case
 toChar no
-  = chr (no + 97)
+  = chr (no + ord 'a')
 
 -- "adds" two letters
 add :: Char -> Char -> Char
-add
-  = undefined
+add ch1 ch2
+  = toChar ((toInt ch1 + toInt ch2) `mod` noOfLetters)
+	where noOfLetters = 26
 
 -- "substracts" two letters
 substract :: Char -> Char -> Char
-substract
-  = undefined
+substract ch1 ch2
+  = toChar ((toInt ch1 - toInt ch2) `mod` noOfLetters)
+	where noOfLetters = 26
+-- used mod so that we get an answer even when the toChar val > 'z'
 
 -- the next functions present
 -- 2 modes of operation for block ciphers : ECB and CBC
@@ -117,21 +120,35 @@ substract
 -- ecb (electronic codebook) with block size of a letter
 --
 ecbEncrypt :: Char -> String -> String
-ecbEncrypt
-  = undefined
-
+-- i represents the index
+ecbEncrypt key message
+	= [add key (message!!i)  | i <- [0..end]]
+	where
+		end = length message - 1
 ecbDecrypt :: Char -> String -> String
-ecbDecrypt
-  = undefined
+ecbDecrypt key message
+		= [substract (message!!i) key  | i <- [0..end]]
+		where
+			end = length message - 1
 
 -- cbc (cipherblock chaining) encryption with block size of a letter
 -- initialisation vector iv is a letter
 -- last argument is message m as a string
---
-cbcEncrypt :: Char -> Char -> String -> String
-cbcEncrypt
-  = undefined
 
+--the names ci and c1 have been chosen from the spec sheet
+cbcEncrypt :: Char -> Char -> String -> String
+cbcEncrypt _ _ []
+	= []
+cbcEncrypt key iv (c : cs)
+	= c1 : ci
+	where
+		c1 = add key (add c iv)
+		ci = cbcEncrypt key c1 cs
 cbcDecrypt :: Char -> Char -> String -> String
-cbcDecrypt
-  = undefined
+cbcDecrypt _ _ []
+  = []
+cbcDecrypt key iv (c : cs)
+	= c1 : ci
+	where
+		c1 = substract (substract c key) iv
+		ci = cbcDecrypt key c cs
